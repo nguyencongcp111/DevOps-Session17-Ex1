@@ -11,6 +11,59 @@ services:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orderdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  order-app:
+    build: .
+    container_name: order-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: postgres
+      DB_PORT: "5432"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./logs:/app/logs
+
+  fluentd:
+    build: ./fluentd
+    container_name: order-fluentd
+    restart: unless-stopped
+    depends_on:
+      - elasticsearch
+    volumes:
+      - ./logs:/app-logs:ro
+      - ./fluentd/fluent.conf:/fluentd/etc/fluent.conf:ro
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0
+    container_name: order-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.0
+    container_name: order-kibana
+    depends_on:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "127.0.0.1:5601:5601"
 
 volumes:
   pgdata:
+  esdata:
